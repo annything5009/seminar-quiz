@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>ควิซสัมนา</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Sarabun", sans-serif;
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    padding: 24px;
+    text-align: center;
+  }
+  h1 { font-size: 1.6em; margin-bottom: 8px; }
+  p.sub { opacity: .85; margin-top: 0; }
+  input {
+    width: 100%;
+    padding: 14px;
+    font-size: 1.1em;
+    border-radius: 10px;
+    border: none;
+    margin: 16px 0;
+    text-align: center;
+  }
+  button.primary {
+    width: 100%;
+    padding: 14px;
+    font-size: 1.1em;
+    border-radius: 10px;
+    border: none;
+    background: #ffcc00;
+    color: #222;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  button.primary:active { transform: scale(0.98); }
+  #screen-lobby, #screen-question, #screen-reveal, #screen-over { display: none; }
+  .active { display: block !important; }
+
+  .qtext {
+    font-size: 1.3em;
+    font-weight: bold;
+    margin-bottom: 20px;
+    min-height: 60px;
+  }
+  .timerbar-wrap {
+    height: 10px;
+    background: rgba(255,255,255,.25);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .timerbar {
+    height: 100%;
+    background: #ffcc00;
+    width: 100%;
+    transition: width 0.2s linear;
+  }
+  .choices {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .choice-btn {
+    padding: 20px 8px;
+    font-size: 1.05em;
+    border-radius: 12px;
+    border: none;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .choice-btn:disabled { opacity: .5; cursor: default; }
+  .c0 { background: #e21b3c; }
+  .c1 { background: #1368ce; }
+  .c2 { background: #d89e00; }
+  .c3 { background: #26890c; }
+
+  .result-box {
+    padding: 24px;
+    border-radius: 16px;
+    font-size: 1.3em;
+    font-weight: bold;
+  }
+  .result-correct { background: rgba(38,137,12,.5); }
+  .result-wrong { background: rgba(226,27,60,.5); }
+  .score-line { margin-top: 10px; font-size: 0.9em; opacity: .9; }
+  .pulse { animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div id="screen-join" class="active">
+    <h1>🎉 ควิซงานสัมนา</h1>
+    <p class="sub">ใส่ชื่อของคุณเพื่อเข้าร่วม (ไม่ต้องล็อกอิน)</p>
+    <input id="nameInput" maxlength="24" placeholder="ชื่อของคุณ" />
+    <button class="primary" onclick="doJoin()">เข้าร่วมเกม</button>
+  </div>
+
+  <div id="screen-lobby">
+    <h1 class="pulse">✅ เข้าร่วมแล้ว!</h1>
+    <p class="sub">รอโฮสเริ่มเกม...</p>
+  </div>
+
+  <div id="screen-question">
+    <div class="timerbar-wrap"><div class="timerbar" id="timerbar"></div></div>
+    <div class="qtext" id="qtext"></div>
+    <div class="choices" id="choices"></div>
+  </div>
+
+  <div id="screen-reveal">
+    <div class="result-box" id="resultBox">
+      <div id="resultText"></div>
+      <div class="score-line" id="scoreLine"></div>
+    </div>
+    <p class="sub" style="margin-top:20px;">รอคำถามถัดไป...</p>
+  </div>
+
+  <div id="screen-over">
+    <h1>🏁 จบเกม!</h1>
+    <p class="sub">ขอบคุณที่ร่วมสนุก ดูคะแนนสูงสุดได้ที่หน้าจอหลัก</p>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const screens = ["join","lobby","question","reveal","over"];
+  function show(name) {
+    screens.forEach(s => {
+      document.getElementById("screen-"+s).classList.toggle("active", s===name);
+    });
+  }
+
+  function doJoin() {
+    const name = document.getElementById("nameInput").value.trim();
+    if (!name) { alert("กรุณาใส่ชื่อ"); return; }
+    socket.emit("join", { name });
+  }
+
+  socket.on("joined", (data) => {
+    show(data.phase === "question" ? "question" : "lobby");
+  });
+
+  socket.on("resetToLobby", () => show("lobby"));
+
+  let countdownInterval;
+  socket.on("question", (q) => {
+    show("question");
+    document.getElementById("qtext").textContent = q.question;
+    const choicesEl = document.getElementById("choices");
+    choicesEl.innerHTML = "";
+    q.choices.forEach((c, i) => {
+      const btn = document.createElement("button");
+      btn.className = "choice-btn c" + i;
+      btn.textContent = c;
+      btn.onclick = () => selectAnswer(i, btn);
+      choicesEl.appendChild(btn);
+    });
+
+    clearInterval(countdownInterval);
+    const bar = document.getElementById("timerbar");
+    const total = q.timeLimit;
+    let remaining = total;
+    bar.style.width = "100%";
+    countdownInterval = setInterval(() => {
+      remaining -= 0.1;
+      const pct = Math.max(0, (remaining/total)*100);
+      bar.style.width = pct + "%";
+      if (remaining <= 0) clearInterval(countdownInterval);
+    }, 100);
+  });
+
+  function selectAnswer(index, btn) {
+    document.querySelectorAll(".choice-btn").forEach(b => b.disabled = true);
+    socket.emit("answer", { choiceIndex: index });
+  }
+
+  socket.on("reveal", (r) => {
+    clearInterval(countdownInterval);
+    show("reveal");
+    const box = document.getElementById("resultBox");
+    const text = document.getElementById("resultText");
+    const scoreLine = document.getElementById("scoreLine");
+    if (r.yourAnswer === null || r.yourAnswer === undefined) {
+      box.className = "result-box result-wrong";
+      text.textContent = "⏱ หมดเวลา ไม่ได้ตอบ";
+    } else if (r.correct) {
+      box.className = "result-box result-correct";
+      text.textContent = "✅ ถูกต้อง! +" + r.scoreGained;
+    } else {
+      box.className = "result-box result-wrong";
+      text.textContent = "❌ ตอบผิด";
+    }
+    scoreLine.textContent = "คะแนนรวมของคุณ: " + r.totalScore;
+  });
+
+  socket.on("gameOver", () => show("over"));
+</script>
+</body>
+</html>
