@@ -1,0 +1,4 @@
+Quiz server running on port 3000
+Host key: cc8bfa0e
+Player link:  http://localhost:3000/player.html
+Host link:    http://localhost:3000/host.html?key=cc8bfa0e
