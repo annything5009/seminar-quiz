@@ -1,314 +1,218 @@
-// server.js
-const path = require("path");
-const http = require("http");
-const crypto = require("crypto");
-const express = require("express");
-const { Server } = require("socket.io");
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
-app.use(express.static(path.join(__dirname, "public")));
-
-// ---------- คำถามควิซ (EIA และสิ่งแวดล้อมทั่วไป) ----------
-const questions = [
-  {
-    question: "1. EIA ย่อมาจากอะไร",
-    choices: [
-      "Environmental Impact Assessment",
-      "Environmental Impact Analysis",
-      "Ecological Impact Assessment",
-      "Environmental Investment Assessment",
-    ],
-    correctIndex: 0,
-    timeLimit: 20,
-  },
-  {
-    question: "2. โครงการประเภทใดที่มักเข้าข่ายต้องทำ EIA ตามกฎหมายไทย",
-    choices: [
-      "ร้านค้าปลีกขนาดเล็ก",
-      "เขื่อนขนาดใหญ่และโรงไฟฟ้า",
-      "บ้านพักอาศัยส่วนบุคคล",
-      "ร้านอาหารทั่วไป",
-    ],
-    correctIndex: 1,
-    timeLimit: 20,
-  },
-  {
-    question: "3. ก๊าซใดเป็นสาเหตุหลักของภาวะโลกร้อน",
-    choices: ["ออกซิเจน", "ไนโตรเจน", "คาร์บอนไดออกไซด์", "อาร์กอน"],
-    correctIndex: 2,
-    timeLimit: 20,
-  },
-  {
-    question: "4. \"การพัฒนาที่ยั่งยืน\" (Sustainable Development) หมายถึงอะไร",
-    choices: [
-      "การพัฒนาที่เน้นเศรษฐกิจเป็นหลักเพียงอย่างเดียว",
-      "การพัฒนาที่ตอบสนองความต้องการปัจจุบัน โดยไม่ทำลายโอกาสของคนรุ่นต่อไป",
-      "การพัฒนาที่ไม่คำนึงถึงสิ่งแวดล้อมเลย",
-      "การเร่งพัฒนาอุตสาหกรรมให้เร็วที่สุด",
-    ],
-    correctIndex: 1,
-    timeLimit: 20,
-  },
-  {
-    question: "5. ขั้นตอนแรกๆ ของกระบวนการจัดทำ EIA โดยทั่วไปคือขั้นตอนใด",
-    choices: [
-      "การจัดทำรายงานฉบับสมบูรณ์",
-      "การกำหนดขอบเขตการศึกษา (Scoping)",
-      "การอนุมัติโครงการ",
-      "การติดตามตรวจสอบหลังก่อสร้างเสร็จ",
-    ],
-    correctIndex: 1,
-    timeLimit: 20,
-  },
-  {
-    question:
-      "6. ตามประกาศคณะกรรมการสิ่งแวดล้อมแห่งชาติ เรื่อง มาตรฐานคุณภาพอากาศในบรรยากาศโดยทั่วไป พ.ศ. 2569 (ฉบับล่าสุด) ค่ามาตรฐาน TSP เฉลี่ย 24 ชั่วโมง กำหนดไว้เท่าใด",
-    choices: ["330 µg/m³", "200 µg/m³", "120 µg/m³", "100 µg/m³"],
-    correctIndex: 1,
-    timeLimit: 20,
-  },
-  {
-    question:
-      "7. ค่ามาตรฐาน PM10 เฉลี่ย 24 ชั่วโมง ตามประกาศฉบับใหม่ พ.ศ. 2569 ปรับลดลงจากเดิม (120 µg/m³) เหลือเท่าใด",
-    choices: ["100 µg/m³", "80 µg/m³", "50 µg/m³", "37.5 µg/m³"],
-    correctIndex: 0,
-    timeLimit: 20,
-  },
-  {
-    question:
-      "8. โครงการหรือกิจการที่ต้อง \"จัดทำรายงาน EIA\" (ไม่นับ IEE และ EHIA) ตามประกาศปัจจุบันของกระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม มีทั้งหมดกี่ประเภท",
-    choices: ["30 ประเภท", "33 ประเภท", "35 ประเภท", "40 ประเภท"],
-    correctIndex: 2,
-    timeLimit: 20,
-  },
-  {
-    question:
-      "9. โครงการที่อาจก่อผลกระทบรุนแรงต่อชุมชนทั้งด้านสิ่งแวดล้อม ทรัพยากรธรรมชาติ และสุขภาพ ต้องจัดทำรายงานประเภทใด และปัจจุบันมีกี่ประเภท",
-    choices: [
-      "IEE จำนวน 2 ประเภท",
-      "EIA จำนวน 35 ประเภท",
-      "EHIA จำนวน 35 ประเภท",
-      "EHIA จำนวน 13 ประเภท",
-    ],
-    correctIndex: 3,
-    timeLimit: 20,
-  },
-  {
-    question:
-      "10. หลังรายงาน EIA ได้รับความเห็นชอบและโครงการเริ่มดำเนินการแล้ว สิ่งที่ต้องทำต่อเนื่องตลอดอายุโครงการคือข้อใด",
-    choices: [
-      "จัดทำ Scoping ใหม่ทุกปี",
-      "ดำเนินการติดตามตรวจสอบผลกระทบสิ่งแวดล้อม (Monitoring) ตามมาตรการที่กำหนดไว้ในรายงาน",
-      "ขอความเห็นชอบจาก สผ. ใหม่ทุก 6 เดือน",
-      "ไม่ต้องดำเนินการใดๆ เพิ่มเติม",
-    ],
-    correctIndex: 1,
-    timeLimit: 20,
-  },
-];
-
-// ---------- ตั้งค่ารหัสโฮสต์ ----------
-const HOST_KEY = process.env.HOST_KEY || crypto.randomBytes(3).toString("hex");
-console.log("======================================");
-console.log(" HOST KEY:", HOST_KEY);
-console.log(" เปิดหน้าโฮสต์: http://localhost:3000/host.html?key=" + HOST_KEY);
-console.log(" ผู้เล่นเข้าที่: http://localhost:3000/player.html");
-console.log("======================================");
-
-// ---------- สถานะเกม ----------
-let phase = "lobby"; // lobby | question | reveal | over
-let currentIndex = -1;
-let questionStartAt = 0;
-let questionTimer = null;
-
-const players = new Map(); // socketId -> { name, score, answered, answerIndex, timeMs }
-const hostSockets = new Set();
-
-function playerList() {
-  return [...players.values()];
-}
-
-function top3() {
-  return playerList()
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((p) => ({ name: p.name, score: p.score }));
-}
-
-function broadcastLobbyCount() {
-  hostSockets.forEach((id) => io.to(id).emit("host:lobby", { count: players.size }));
-}
-
-function sendQuestion(index) {
-  currentIndex = index;
-  phase = "question";
-  questionStartAt = Date.now();
-
-  players.forEach((p) => {
-    p.answered = false;
-    p.answerIndex = null;
-    p.timeMs = null;
-  });
-
-  const q = questions[index];
-
-  io.to("players").emit("question", {
-    index,
-    total: questions.length,
-    question: q.question,
-    choices: q.choices,
-    timeLimit: q.timeLimit,
-  });
-
-  hostSockets.forEach((id) =>
-    io.to(id).emit("host:question", {
-      index,
-      total: questions.length,
-      question: q.question,
-      choices: q.choices,
-      totalPlayers: players.size,
-    })
-  );
-
-  clearTimeout(questionTimer);
-  questionTimer = setTimeout(() => revealQuestion(), q.timeLimit * 1000 + 300);
-}
-
-function revealQuestion() {
-  if (phase !== "question") return;
-  clearTimeout(questionTimer);
-  phase = "reveal";
-
-  const q = questions[currentIndex];
-  const distribution = [0, 0, 0, 0];
-
-  players.forEach((p, socketId) => {
-    if (p.answered && p.answerIndex !== null) {
-      distribution[p.answerIndex] = (distribution[p.answerIndex] || 0) + 1;
-    }
-    const correct = p.answered && p.answerIndex === q.correctIndex;
-    let scoreGained = 0;
-    if (correct) {
-      const remaining = Math.max(0, q.timeLimit * 1000 - p.timeMs);
-      const fraction = remaining / (q.timeLimit * 1000);
-      scoreGained = Math.round(500 + 500 * fraction);
-      p.score += scoreGained;
-    }
-    io.to(socketId).emit("reveal", {
-      yourAnswer: p.answered ? p.answerIndex : null,
-      correct,
-      scoreGained,
-      totalScore: p.score,
-    });
-  });
-
-  const isLast = currentIndex + 1 >= questions.length;
-
-  hostSockets.forEach((id) =>
-    io.to(id).emit("host:reveal", {
-      isLast,
-      distribution,
-      correctIndex: q.correctIndex,
-      top3: top3(),
-    })
-  );
-}
-
-function nextQuestion() {
-  const nextIndex = currentIndex + 1;
-  if (nextIndex >= questions.length) {
-    phase = "over";
-    io.to("players").emit("gameOver");
-    hostSockets.forEach((id) => io.to(id).emit("host:gameOver", { top3: top3() }));
-    return;
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>โฮสต์ควิซ</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Sarabun", sans-serif;
+    background: #16213e;
+    min-height: 100vh;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  sendQuestion(nextIndex);
-}
+  .wrap { width: 100%; max-width: 900px; padding: 24px; text-align: center; }
+  h1 { font-size: 2em; margin-bottom: 4px; }
+  .sub { opacity: .7; margin-top: 0; }
+  .keybox {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+  input {
+    padding: 10px;
+    font-size: 1em;
+    border-radius: 8px;
+    border: none;
+    text-align: center;
+  }
+  button {
+    padding: 12px 28px;
+    font-size: 1.1em;
+    border-radius: 10px;
+    border: none;
+    background: #ffcc00;
+    color: #222;
+    font-weight: bold;
+    cursor: pointer;
+    margin: 6px;
+  }
+  button:disabled { opacity: .4; cursor: default; }
+  .big-count { font-size: 3em; font-weight: bold; }
+  .qbox { background: #1e293b; border-radius: 16px; padding: 24px; margin: 20px 0; text-align: left; }
+  .qtext { font-size: 1.5em; font-weight: bold; margin-bottom: 16px; text-align: center; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .choice-row { padding: 14px; border-radius: 10px; font-weight: bold; display: flex; justify-content: space-between; }
+  .c0 { background: #e21b3c; } .c1 { background: #1368ce; }
+  .c2 { background: #d89e00; } .c3 { background: #26890c; }
+  .correct-mark { outline: 4px solid #fff; }
+  .progress { margin: 10px 0; opacity: .8; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: left; }
+  th { opacity: .7; font-weight: normal; }
+  .rank1 { color: #ffd700; font-weight: bold; }
+  .rank2 { color: #c0c0c0; font-weight: bold; }
+  .rank3 { color: #cd7f32; font-weight: bold; }
+  #screen-locked, #screen-lobby, #screen-question, #screen-reveal, #screen-over { display: none; }
+  .active { display: block !important; }
+  code { background: #0f172a; padding: 2px 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
 
-function resetGame() {
-  clearTimeout(questionTimer);
-  phase = "lobby";
-  currentIndex = -1;
-  players.forEach((p) => (p.score = 0));
-  io.to("players").emit("resetToLobby");
-  broadcastLobbyCount();
-}
+  <div id="screen-locked" class="active">
+    <h1>🔐 เข้าสู่โหมดโฮสต์</h1>
+    <p class="sub">🔑 ใส่รหัสโฮสต์ (แสดงใน terminal ตอนรันเซิร์ฟเวอร์)</p>
+    <input id="keyInput" placeholder="🔑 host key" />
+    <br /><button onclick="doAuth()">➡️ เข้าสู่ระบบ</button>
+    <p id="authError" style="color:#f87171;"></p>
+  </div>
 
-// ---------- socket.io ----------
-io.on("connection", (socket) => {
-  // ---- ผู้เล่น ----
-  socket.on("join", ({ name }) => {
-    players.set(socket.id, {
-      name: (name || "ผู้เล่น").slice(0, 24),
-      score: 0,
-      answered: false,
-      answerIndex: null,
-      timeMs: null,
+  <div id="screen-lobby">
+    <h1>🌱 🎉 ชาวสิ่งแวดล้อมพักเบรก 🍃</h1>
+    <p class="sub">📱 ให้ผู้เข้าร่วมเปิดลิงก์นี้บนมือถือ:</p>
+    <div class="keybox">
+      <code id="playerLink"></code>
+    </div>
+    <p>👥 ผู้เล่นเข้าร่วมแล้ว:</p>
+    <div class="big-count" id="playerCount">0</div>
+    <button id="startBtn" onclick="startGame()">▶️ เริ่มเกม</button>
+  </div>
+
+  <div id="screen-question">
+    <p class="progress" id="qProgress"></p>
+    <div class="qbox">
+      <div class="qtext" id="qtext"></div>
+      <div class="choices" id="choices"></div>
+    </div>
+    <p class="progress" id="answerProgress"></p>
+  </div>
+
+  <div id="screen-reveal">
+    <p class="progress" id="rProgress"></p>
+    <div class="qbox">
+      <div class="qtext">✅ คำตอบที่ถูกต้อง</div>
+      <div class="choices" id="rChoices"></div>
+    </div>
+    <h2>🏆 คะแนนสูงสุด 3 อันดับ (เห็นเฉพาะโฮสต์)</h2>
+    <table id="leaderboard"></table>
+    <button id="nextBtn" onclick="nextQuestion()">➡️ ข้อถัดไป</button>
+  </div>
+
+  <div id="screen-over">
+    <h1>🏁 จบเกม! 🎊</h1>
+    <h2>🏆 ผู้ชนะ 3 อันดับแรก</h2>
+    <table id="finalLeaderboard"></table>
+    <button onclick="resetGame()">🔄 เริ่มเกมใหม่ (รีเซ็ตคะแนน)</button>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const screens = ["locked","lobby","question","reveal","over"];
+  function show(name) {
+    screens.forEach(s => {
+      document.getElementById("screen-"+s).classList.toggle("active", s===name);
     });
-    socket.join("players");
-    socket.emit("joined", { phase });
-    broadcastLobbyCount();
+  }
 
-    if (phase === "question" && currentIndex >= 0) {
-      const q = questions[currentIndex];
-      const elapsed = Date.now() - questionStartAt;
-      socket.emit("question", {
-        index: currentIndex,
-        total: questions.length,
-        question: q.question,
-        choices: q.choices,
-        timeLimit: Math.max(1, q.timeLimit - Math.floor(elapsed / 1000)),
-      });
-    }
+  const urlParams = new URLSearchParams(window.location.search);
+  const prefilledKey = urlParams.get("key");
+  if (prefilledKey) document.getElementById("keyInput").value = prefilledKey;
+
+  document.getElementById("playerLink").textContent =
+    window.location.origin + "/player.html";
+
+  function doAuth() {
+    const key = document.getElementById("keyInput").value.trim();
+    socket.emit("host:auth", { key }, (res) => {
+      if (res.ok) {
+        show("lobby");
+      } else {
+        document.getElementById("authError").textContent = "รหัสไม่ถูกต้อง";
+      }
+    });
+  }
+  if (prefilledKey) doAuth();
+
+  socket.on("host:lobby", (data) => {
+    document.getElementById("playerCount").textContent = data.count;
   });
 
-  socket.on("answer", ({ choiceIndex }) => {
-    const p = players.get(socket.id);
-    if (!p || phase !== "question" || p.answered) return;
-    p.answered = true;
-    p.answerIndex = choiceIndex;
-    p.timeMs = Date.now() - questionStartAt;
+  function startGame() { socket.emit("host:start"); }
+  function nextQuestion() { socket.emit("host:next"); }
+  function resetGame() { socket.emit("host:reset"); show("lobby"); }
 
-    const answeredCount = playerList().filter((pl) => pl.answered).length;
-    hostSockets.forEach((id) =>
-      io.to(id).emit("host:answerProgress", { answeredCount, totalPlayers: players.size })
-    );
+  const colorClasses = ["c0","c1","c2","c3"];
+
+  socket.on("host:question", (q) => {
+    show("question");
+    document.getElementById("qProgress").textContent =
+      `ข้อ ${q.index+1} / ${q.total}`;
+    document.getElementById("qtext").textContent = q.question;
+    const el = document.getElementById("choices");
+    el.innerHTML = "";
+    const shapeIcons = ["▲", "◆", "●", "■"];
+    q.choices.forEach((c, i) => {
+      const div = document.createElement("div");
+      div.className = "choice-row " + colorClasses[i];
+      div.innerHTML = `<span>${shapeIcons[i]} ${c}</span>`;
+      el.appendChild(div);
+    });
+    document.getElementById("answerProgress").textContent =
+      `ตอบแล้ว 0 / ${q.totalPlayers}`;
   });
 
-  // ---- โฮสต์ ----
-  socket.on("host:auth", ({ key }, cb) => {
-    if (key === HOST_KEY) {
-      hostSockets.add(socket.id);
-      cb({ ok: true });
-      socket.emit("host:lobby", { count: players.size });
-    } else {
-      cb({ ok: false });
-    }
+  socket.on("host:answerProgress", (d) => {
+    document.getElementById("answerProgress").textContent =
+      `ตอบแล้ว ${d.answeredCount} / ${d.totalPlayers}`;
   });
 
-  socket.on("host:start", () => {
-    if (!hostSockets.has(socket.id)) return;
-    sendQuestion(0);
+  socket.on("host:reveal", (r) => {
+    show("reveal");
+    document.getElementById("rProgress").textContent =
+      r.isLast ? "ข้อสุดท้าย" : "";
+    const el = document.getElementById("rChoices");
+    el.innerHTML = "";
+    const shapeIcons = ["▲", "◆", "●", "■"];
+    r.distribution.forEach((count, i) => {
+      const div = document.createElement("div");
+      div.className = "choice-row " + colorClasses[i] +
+        (i === r.correctIndex ? " correct-mark" : "");
+      div.innerHTML = `<span>${shapeIcons[i]}${i === r.correctIndex ? " ✔" : ""}</span><span>${count} คน</span>`;
+      el.appendChild(div);
+    });
+
+    renderLeaderboard("leaderboard", r.top3);
+    document.getElementById("nextBtn").textContent =
+      r.isLast ? "จบเกม 🏁" : "ข้อถัดไป ▶";
   });
 
-  socket.on("host:next", () => {
-    if (!hostSockets.has(socket.id)) return;
-    nextQuestion();
-  });
+  function renderLeaderboard(tableId, top3) {
+    const table = document.getElementById(tableId);
+    const ranks = ["rank1","rank2","rank3"];
+    const medals = ["🥇","🥈","🥉"];
+    let html = "<tr><th></th><th>ชื่อ</th><th>คะแนน</th></tr>";
+    top3.forEach((p, i) => {
+      html += `<tr><td class="${ranks[i]}">${medals[i]}</td><td>${p.name}</td><td>${p.score}</td></tr>`;
+    });
+    table.innerHTML = html;
+  }
 
-  socket.on("host:reset", () => {
-    if (!hostSockets.has(socket.id)) return;
-    resetGame();
+  socket.on("host:gameOver", (data) => {
+    show("over");
+    renderLeaderboard("finalLeaderboard", data.top3);
   });
-
-  socket.on("disconnect", () => {
-    hostSockets.delete(socket.id);
-    if (players.delete(socket.id)) broadcastLobbyCount();
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+</script>
+</body>
+</html>
